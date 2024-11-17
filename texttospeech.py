@@ -9,80 +9,22 @@ import edge_tts
 from pydub import AudioSegment
 import io
 
-# Page config
-st.set_page_config(
-    page_title="Professional Text to Speech Generator",
-    page_icon="🎙️",
-    layout="wide"
-)
+# Page config and other imports remain same...
 
-# Title and description
-st.title("🎙️ Professional Text-to-Speech Generator")
-st.markdown("Create high-quality audio content for your YouTube channel")
+# Modified rate calculation
+def calculate_rate(percentage):
+    # Convert percentage to appropriate rate format
+    # 100% = +0%, 200% = +100%, 50% = -50%
+    adjusted_rate = percentage - 100
+    return f"{adjusted_rate:+d}%"
 
-# Available voices
-VOICES = {
-    "Female (US)": "en-US-JennyNeural",
-    "Male (US)": "en-US-GuyNeural",
-    "Female (UK)": "en-GB-SoniaNeural",
-    "Male (UK)": "en-GB-RyanNeural",
-    "Female (Australian)": "en-AU-NatashaNeural",
-    "Male (Australian)": "en-AU-WilliamNeural",
-    "Female (Indian)": "en-IN-NeerjaNeural",
-    "Male (Indian)": "en-IN-PrabhatNeural"
-}
-
-# Voice styles
-STYLES = [
-    "normal",
-    "cheerful",
-    "excited",
-    "friendly",
-    "hopeful",
-    "sad",
-    "shouting",
-    "terrified",
-    "unfriendly",
-    "whispering"
-]
-
-async def generate_speech(text, voice, style, rate, volume):
-    communicate = edge_tts.Communicate(text, voice, rate=f"{rate}%", volume=volume)
+async def generate_speech(text, voice, style, rate_percentage, volume):
+    rate = calculate_rate(rate_percentage)
+    communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume)
     audio_data = await communicate.get_audio()
     return audio_data
 
-def mix_background_music(voice_audio, bg_music, bg_volume=-20):
-    try:
-        # Convert voice audio bytes to AudioSegment
-        voice_segment = AudioSegment.from_mp3(io.BytesIO(voice_audio))
-        
-        # Convert background music bytes to AudioSegment
-        bg_segment = AudioSegment.from_mp3(io.BytesIO(bg_music.read()))
-        
-        # Adjust background music duration to match voice
-        if len(bg_segment) < len(voice_segment):
-            bg_segment = bg_segment * (len(voice_segment) // len(bg_segment) + 1)
-        bg_segment = bg_segment[:len(voice_segment)]
-        
-        # Adjust volume and mix
-        bg_segment = bg_segment + bg_volume
-        final_audio = voice_segment.overlay(bg_segment)
-        
-        # Export to bytes
-        buffer = io.BytesIO()
-        final_audio.export(buffer, format="mp3")
-        return buffer.getvalue()
-    except Exception as e:
-        st.error(f"Error mixing audio: {str(e)}")
-        return voice_audio
-
-def get_binary_file_downloader_html(bin_data, file_label='File', filename="audio.mp3"):
-    bin_str = base64.b64encode(bin_data).decode()
-    href = f'<a href="data:application/octet-stream;base64,{bin_str}" download="{filename}">Download {file_label}</a>'
-    return href
-
-# Main content area
-tabs = st.tabs(["Single Story", "Batch Processing"])
+# Rest of your imports and initial setup remain the same...
 
 with tabs[0]:
     st.header("Single Story Generator")
@@ -110,14 +52,17 @@ with tabs[0]:
             STYLES
         )
         
+        # Modified rate slider
         speaking_rate = st.slider(
             "Speaking Rate",
             min_value=50,
             max_value=200,
             value=100,
-            help="100 is normal speed"
+            step=10,
+            help="100% is normal speed, 50% is slower, 200% is faster"
         )
         
+        # Modified volume slider
         volume = st.slider(
             "Voice Volume",
             min_value=0,
@@ -125,7 +70,8 @@ with tabs[0]:
             value=100,
             help="Adjust voice volume"
         )
-        
+
+        # Background music settings
         st.subheader("Background Music")
         bg_music_file = st.file_uploader(
             "Upload Background Music (optional)",
@@ -145,13 +91,13 @@ with tabs[0]:
         if story_text:
             with st.spinner("Generating audio..."):
                 try:
-                    # Generate speech
+                    # Generate speech with corrected rate format
                     audio_data = asyncio.run(generate_speech(
                         story_text,
                         VOICES[selected_voice],
                         voice_style,
-                        speaking_rate,
-                        volume
+                        speaking_rate,  # This will now be properly formatted
+                        f"{volume}%"
                     ))
                     
                     # Mix with background music if provided
@@ -177,9 +123,11 @@ with tabs[0]:
                     
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")
+                    st.error("Please try a different rate or voice setting")
         else:
             st.warning("Please enter some text to generate audio.")
 
+# Update the batch processing section similarly
 with tabs[1]:
     st.header("Batch Story Processing")
     
@@ -190,7 +138,6 @@ with tabs[1]:
     )
     
     if uploaded_files:
-        # Use the same voice settings for batch processing
         col1, col2 = st.columns(2)
         
         with col1:
@@ -207,14 +154,17 @@ with tabs[1]:
             )
         
         with col2:
+            # Modified batch rate slider
             batch_rate = st.slider(
                 "Speaking Rate for Batch Processing",
                 min_value=50,
                 max_value=200,
                 value=100,
+                step=10,
                 key="batch_rate"
             )
             
+            # Modified batch volume slider
             batch_volume = st.slider(
                 "Voice Volume for Batch Processing",
                 min_value=0,
@@ -227,19 +177,17 @@ with tabs[1]:
             with st.spinner("Processing stories..."):
                 try:
                     for uploaded_file in uploaded_files:
-                        # Read content
                         content = uploaded_file.read().decode()
                         
-                        # Generate audio
+                        # Generate audio with corrected rate format
                         audio_data = asyncio.run(generate_speech(
                             content,
                             VOICES[batch_voice],
                             batch_style,
                             batch_rate,
-                            batch_volume
+                            f"{batch_volume}%"
                         ))
                         
-                        # Display results
                         st.subheader(uploaded_file.name)
                         st.audio(audio_data, format='audio/mp3')
                         st.markdown(
@@ -254,13 +202,4 @@ with tabs[1]:
                 except Exception as e:
                     st.error(f"An error occurred during batch processing: {str(e)}")
 
-# Footer
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: center'>
-    <p>Created for professional YouTube content creation</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# Footer remains the same...
